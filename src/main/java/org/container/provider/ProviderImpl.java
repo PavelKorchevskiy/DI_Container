@@ -9,7 +9,7 @@ public class ProviderImpl<T> implements Provider<T> {
   }
 
   @Override
-  public T getInstance() {
+  public synchronized T getInstance() {
     return instance;
   }
 }

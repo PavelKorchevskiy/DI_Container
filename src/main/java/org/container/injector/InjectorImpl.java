@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import org.container.annotations.Inject;
 import org.container.exceptions.BindingNotFoundException;
 import org.container.exceptions.ConstructorNotFoundException;
@@ -15,9 +16,9 @@ import org.container.provider.ProviderImpl;
 
 public class InjectorImpl implements Injector {
 
-  final private Map<Class<?>, Class<?>> map = new HashMap<>();
-  final private Map<Class<?>, Class<?>> mapForSingleton = new HashMap<>();
-  final private Map<Class<?>, Object> mapSingletonInstances = new HashMap<>();
+  final private Map<Class<?>, Class<?>> map = new ConcurrentHashMap<>();
+  final private Map<Class<?>, Class<?>> mapForSingleton = new ConcurrentHashMap<>();
+  final private Map<Class<?>, Object> mapSingletonInstances = new ConcurrentHashMap<>();
 
   //получение инстанса класса со всеми иньекциями по классу интерфейса
   @Override
@@ -46,6 +47,7 @@ public class InjectorImpl implements Injector {
         mapSingletonInstances.put(classSingleton, instanceSingleton);
         return instanceSingleton;
       }
+      return instanceSingleton;
     }
     //
     Class<?> clazz = map.get(clazzI);

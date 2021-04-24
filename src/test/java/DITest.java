@@ -1,3 +1,7 @@
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import dao.A;
@@ -51,6 +55,57 @@ public class DITest {
     injector.bind(DI.class, DWithTooManyConstructors.class);
     injector.bind(BI.class, B.class);
     assertThrows(BindingNotFoundException.class, () -> injector.getProvider(DI.class));
+  }
+
+  @Test
+  public void nullIfBindingNotFound() {
+    Injector injector = new InjectorImpl();
+    DI object = injector.getProvider(DI.class).getInstance();
+    assertNull(object);
+  }
+
+  @Test
+  public void prototype() {
+    Injector injector = new InjectorImpl();
+    injector.bind(AI.class, A.class);
+    injector.bind(BI.class, B.class);
+    injector.bind(CI.class, C.class);
+    Provider<AI> firstProvider = injector.getProvider(AI.class);
+    Provider<AI> secondProvider = injector.getProvider(AI.class);
+    AI first = firstProvider.getInstance();
+    AI second = secondProvider.getInstance();
+    assertNotEquals(first, second);
+  }
+
+  @Test
+  public void singleton() {
+    Injector injector = new InjectorImpl();
+    injector.bindSingleton(AI.class, A.class);
+    injector.bindSingleton(BI.class, B.class);
+    injector.bindSingleton(CI.class, C.class);
+    Provider<AI> firstProvider = injector.getProvider(AI.class);
+    Provider<AI> secondProvider = injector.getProvider(AI.class);
+    AI first = firstProvider.getInstance();
+    AI second = secondProvider.getInstance();
+    assertEquals(first, second);
+  }
+
+  //если забиндить и как сингалтон и как прототайп
+  //сингалтон будет в приоритете
+  @Test
+  public void singletonInPriority() {
+    Injector injector = new InjectorImpl();
+    injector.bind(AI.class, A.class);
+    injector.bind(BI.class, B.class);
+    injector.bind(CI.class, C.class);
+    injector.bindSingleton(AI.class, A.class);
+    injector.bindSingleton(BI.class, B.class);
+    injector.bindSingleton(CI.class, C.class);
+    Provider<AI> firstProvider = injector.getProvider(AI.class);
+    Provider<AI> secondProvider = injector.getProvider(AI.class);
+    AI first = firstProvider.getInstance();
+    AI second = secondProvider.getInstance();
+    assertEquals(first, second);
   }
 
 }

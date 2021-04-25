@@ -3,7 +3,6 @@ package org.container.injector;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,87 +15,55 @@ import org.container.provider.ProviderImpl;
 
 public class InjectorImpl implements Injector {
 
-  final private Map<Class<?>, Class<?>> map = new ConcurrentHashMap<>();
+  final private Map<Class<?>, Class<?>> mapForPrototype = new ConcurrentHashMap<>();
   final private Map<Class<?>, Class<?>> mapForSingleton = new ConcurrentHashMap<>();
   final private Map<Class<?>, Object> mapSingletonInstances = new ConcurrentHashMap<>();
 
-  //получение инстанса класса со всеми иньекциями по классу интерфейса
   @Override
-  public <T> Provider<T> getProvider(Class<T> type) {
-    return new ProviderImpl<T>((T) createInstanceFromClassInterface(type));
+  public synchronized <T> Provider<T> getProvider(Class<T> type) {
+    return new ProviderImpl<>((T) createInstanceFromClassInterface(type));
   }
 
-  //регистрация байндинга по классу интерфейса и его реализации
   @Override
   public <T> void bind(Class<T> intf, Class<? extends T> impl) {
-    map.put(intf, impl);
+    mapForPrototype.put(intf, impl);
   }
 
-  //регистрация синглтон класса
   @Override
   public <T> void bindSingleton(Class<T> intf, Class<? extends T> impl) {
     mapForSingleton.put(intf, impl);
   }
 
   private Object createInstanceFromClassInterface(Class<?> clazzI) {
-    Class<?> classSingleton = mapForSingleton.get(clazzI);
-    if (classSingleton != null) {
+    if (mapForSingleton.containsKey(clazzI)) {
+      Class<?> classSingleton = mapForSingleton.get(clazzI);
       Object instanceSingleton = mapSingletonInstances.get(classSingleton);
       if (instanceSingleton == null) {
-        instanceSingleton = createInstanceFromClass(classSingleton);
-        mapSingletonInstances.put(classSingleton, instanceSingleton);
-        return instanceSingleton;
+        synchronized (mapSingletonInstances) {
+          instanceSingleton = createInstanceFromClass(classSingleton);
+          mapSingletonInstances.put(classSingleton, instanceSingleton);
+        }
       }
       return instanceSingleton;
     }
-    //
-    Class<?> clazz = map.get(clazzI);
-    if (clazz == null) {
-      return null;
+    if (mapForPrototype.containsKey(clazzI)) {
+      return createInstanceFromClass(mapForPrototype.get(clazzI));
     }
-    return createInstanceFromClass(clazz);
-//    Object instance = null;
-//    //берем все конструкторы и ищем отмеченные анотацией
-//    Constructor<?>[] constructors = clazz.getDeclaredConstructors();
-//    for (Constructor<?> constructor : constructors) {
-//      if (constructor.isAnnotationPresent(Inject.class)) {
-//        //если несколько таких конструкторов - исключение
-//        if (instance != null) {
-//          throw new TooManyConstructorsException();
-//        }
-//        instance = getInstanceFromAnnotatedConstructor(constructor);
-//      }
-//    }
-//    //если нет таких конструкторов пытаемся использовать конструктор без параметров
-//    // и если такого нет - исключение
-//    if (instance == null) {
-//      try {
-//        Constructor<?> constructor = clazz.getConstructor();
-//        instance = constructor.newInstance();
-//      } catch (NoSuchMethodException e) {
-//        throw new ConstructorNotFoundException();
-//      } catch (IllegalAccessException | InstantiationException | InvocationTargetException e) {
-//        throw new RuntimeException(e);
-//      }
-//    }
-//    return instance;
+    return null;
   }
 
   private Object createInstanceFromClass(Class<?> clazz) {
     Object instance = null;
-    //берем все конструкторы и ищем отмеченные анотацией
     Constructor<?>[] constructors = clazz.getDeclaredConstructors();
     for (Constructor<?> constructor : constructors) {
       if (constructor.isAnnotationPresent(Inject.class)) {
-        //если несколько таких конструкторов - исключение
-        if (instance != null) {
+        if (instance == null) {
+          instance = getInstanceFromAnnotatedConstructor(constructor);
+        } else {
           throw new TooManyConstructorsException();
         }
-        instance = getInstanceFromAnnotatedConstructor(constructor);
       }
     }
-    //если нет таких конструкторов пытаемся использовать конструктор без параметров
-    // и если такого нет - исключение
     if (instance == null) {
       try {
         Constructor<?> constructor = clazz.getConstructor();
@@ -111,27 +78,21 @@ public class InjectorImpl implements Injector {
   }
 
   private Object getInstanceFromAnnotatedConstructor(Constructor<?> constructor) {
-      try {
-        //если находим конструктор с аннотацией - сразу создаем объект
-        //аргументы создаем рекурсивно вызывая этот метод
-        Object[] args = getArgs(constructor);
-        if (Arrays.stream(args).anyMatch(Objects::isNull)) {
-          throw new BindingNotFoundException();
-        }
-        return constructor.newInstance(args);
-      } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-        throw new RuntimeException(e);
+    try {
+      Object[] args = getArgs(constructor);
+      if (Arrays.stream(args).anyMatch(Objects::isNull)) {
+        throw new BindingNotFoundException();
       }
+      return constructor.newInstance(args);
+    } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+      throw new RuntimeException(e);
     }
+  }
 
   private Object[] getArgs(Constructor<?> constructor) {
     Class<?>[] parameterTypes = constructor.getParameterTypes();
-    int length = parameterTypes.length;
-    Object[] args = new Object[length];
-    for (int i = 0; i < length; i++) {
-      args[i] = createInstanceFromClassInterface(parameterTypes[i]);
-    }
-    return args;
+    return Arrays.stream(parameterTypes)
+        .map(this::createInstanceFromClassInterface)
+        .toArray();
   }
-
 }
